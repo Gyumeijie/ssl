@@ -24,25 +24,28 @@ function split() {
 
       if [ "$start" = "/" ] && [ "$end" = "/" ]; then 
          # The separator is regexp
-         template="split(${q}$string${q}, array, $separator);"
+         template="len=split(${q}$string${q}, array, $separator);"
       else
          # The separator is string
          # Note: the awk will unexpectedly treat "-+" as an regexp, so we need to 
          # escape such special characters. After escaped, these special characters
          # are prefixed with two "\"
          separator=$(sed 's/\([\/+*?{}\[]\)/\\\\\1/g' <<<"$separator")
-         template="split(${q}$string${q}, array, ${q}$separator${q});"
+         template="len=split(${q}$string${q}, array, ${q}$separator${q});"
       fi
    fi
-
-   local awk_stdout=$(eval "awk 'BEGIN { 
-                                   $template
-                                   len = length(array)
-                                   for (i=1; i<=len; i++) {
-                                     print array[i]
-                                   }
-                                   
-                                }' 2>/dev/null")
+   
+   # Use `len=split(string, array, fieldsep)` to get the length of array in awk.
+   # The `split(string, array, fieldsep); len=length(array)` will cause error:
+   # illegal reference to array 'array'
+   local awk_cmd="awk '
+                  BEGIN { 
+                    $template
+                    for (i=1; i<=len; i++) {
+                      print array[i]
+                    }               
+                  }' 2>/dev/null"
+   local awk_stdout=$(eval $awk_cmd)
    
    # Determine how many parts of result to ouput, the default is all parts
    local count=$(echo "$awk_stdout" | wc -l)
@@ -53,6 +56,6 @@ function split() {
    echo "$awk_stdout" | head -n $limit
 }
 
-# split "$1" $2 $3
+split "$1" $2 $3
 # @example ./split.sh "hello world" '""' 5
 # @example ./split.sh "he;is-a-good;boy" "/[;-]/" 
